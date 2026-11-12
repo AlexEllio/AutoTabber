@@ -18,19 +18,28 @@ AutoTabber is a Chrome extension (Manifest V3) that automatically organizes tabs
 
 ---
 
-## Installation (Developer Mode)
+## Quick Install (Prebuilt Download)
+
+1. [Download the latest AutoTabber ZIP](https://github.com/AlexEllio/AutoTabber/releases/latest/download/AutoTabber.zip) and extract it.
+2. Open Google Chrome and navigate to `chrome://extensions/`.
+3. Turn on the **Developer mode** toggle in the top-right corner.
+4. Click **Load unpacked** in the top-left corner and select the extracted folder containing `manifest.json`.
+5. AutoTabber will appear in your Chrome toolbar!
+
+No cloning or building is required. Chrome requires extensions installed this way to be loaded as unpacked extensions. To build from source instead, follow the [developer installation](#developer-installation) steps.
+
+New prebuilt downloads are published automatically when a `v*` version tag is pushed.
+
+## Developer Installation
 
 1. Clone or open this repository in your terminal.
-2. Build the extension:
+2. Install dependencies and build the extension:
    ```bash
    npm install
    npm run build
    ```
-3. Open Google Chrome and navigate to `chrome://extensions/`.
-4. Turn on the **Developer mode** toggle in the top-right corner.
-5. Click **Load unpacked** in the top-left corner.
-6. Select the `dist` folder generated inside the repository directory.
-7. AutoTabber will appear in your Chrome toolbar!
+3. Open `chrome://extensions/`, turn on **Developer mode**, and click **Load unpacked**.
+4. Select the `dist` folder generated inside the repository directory.
 
 ---
 
