@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoTabber - Rules & Settings Manager</title>
+  <link rel="stylesheet" href="./options.css" />
+</head>
+<body>
+  <div class="options-container">
+    <header class="page-header">
+      <div class="header-brand">
+        <span class="logo-icon">📑</span>
+        <div>
+          <h1>AutoTabber</h1>
+          <p class="subtitle">Automatic Tab Grouping Rules & Preferences</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-add-rule-modal" class="btn btn-primary">+ Add New Rule</button>
+      </div>
+    </header>
+
+    <div class="layout-grid">
+      <main class="main-content">
+        <section class="card">
+          <div class="card-header">
+            <h2>Grouping Rules</h2>
+            <span class="info-tag">Highest specificity & top-of-list rules match first</span>
+          </div>
+
+          <div id="rules-manager-list" class="rules-manager-list"></div>
+        </section>
+      </main>
+
+      <aside class="sidebar">
+        <section class="card">
+          <div class="card-header">
+            <h3>General Settings</h3>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">
+              <span>Auto-collapse inactive groups</span>
+              <p class="setting-desc">Keeps tab bar compact by collapsing tab groups you aren't currently viewing.</p>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="setting-auto-collapse" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <label class="setting-label">
+              <span>Organize tabs on startup</span>
+              <p class="setting-desc">Automatically sorts open tabs into groups when Chrome opens.</p>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="setting-startup-organize" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h3>Backup & Restore</h3>
+          </div>
+          <p class="setting-desc">Export your rules to JSON or restore rules across different Chrome profiles.</p>
+          <div class="backup-actions">
+            <button id="btn-export-json" class="btn btn-secondary btn-block">Export Rules (JSON)</button>
+            <button id="btn-import-trigger" class="btn btn-secondary btn-block">Import Rules (JSON)</button>
+            <input type="file" id="input-import-file" accept=".json" class="hidden" />
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h3>Reset</h3>
+          </div>
+          <p class="setting-desc">Reset all rules back to default starters (Confluence, Jira, GitHub).</p>
+          <button id="btn-reset-defaults" class="btn btn-danger btn-block">Restore Default Rules</button>
+        </section>
+      </aside>
+    </div>
+
+    <!-- Modal for Adding / Editing Rule -->
+    <div id="rule-modal" class="modal-backdrop hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Add Tab Group Rule</h3>
+          <button id="btn-close-modal" class="icon-btn">✕</button>
+        </div>
+        <form id="form-rule-edit">
+          <input type="hidden" id="edit-rule-id" value="" />
+          <div class="form-group">
+            <label for="rule-name-input">Tab Group Name:</label>
+            <input
+              type="text"
+              id="rule-name-input"
+              class="input-text"
+              placeholder="e.g. Confluence, Jira, Docs"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Group Color:</label>
+            <div id="modal-color-picker" class="color-options"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="rule-patterns-input">URL Patterns (one per line or comma-separated):</label>
+            <textarea
+              id="rule-patterns-input"
+              class="input-textarea"
+              rows="4"
+              placeholder="e.g.&#10;atlassian.net/wiki*&#10;*.atlassian.net/wiki"
+              required
+            ></textarea>
+            <span class="help-text">Supports wildcard subdomains (<code>*.domain.com</code>) and path prefixes (<code>domain.com/path*</code>).</span>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Rule</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="toast-notification" class="toast hidden"></div>
+  </div>
+
+  <script type="module" src="./options.ts"></script>
+</body>
+</html>

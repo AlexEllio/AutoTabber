@@ -1,0 +1,28 @@
+{
+  "name": "autotabber",
+  "version": "1.0.0",
+  "description": "Chrome extension to automatically organize tabs into native Tab Groups based on URL patterns and domains.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "chrome-extension",
+    "tab-groups",
+    "tabs",
+    "productivity",
+    "manifest-v3"
+  ],
+  "devDependencies": {
+    "@types/chrome": "^0.0.308",
+    "@types/node": "^26.6.6",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.7"
+  }
+}

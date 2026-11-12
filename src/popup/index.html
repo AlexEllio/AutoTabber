@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoTabber</title>
+  <link rel="stylesheet" href="./popup.css" />
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <div class="logo-area">
+        <span class="logo-icon">📑</span>
+        <h1>AutoTabber</h1>
+      </div>
+      <button id="btn-open-options" class="icon-btn" title="Open Settings & Rules Manager">⚙️</button>
+    </header>
+
+    <section class="quick-organize-section">
+      <button id="btn-organize-now" class="btn btn-primary btn-block">
+        <span class="btn-icon">⚡</span> Organize Open Tabs Now
+      </button>
+      <div id="organize-feedback" class="feedback-msg hidden"></div>
+    </section>
+
+    <section class="quick-add-section">
+      <div class="section-title">Quick Add Rule for This Tab</div>
+      <form id="form-quick-add">
+        <div class="form-row">
+          <input
+            type="text"
+            id="quick-rule-name"
+            class="input-text"
+            placeholder="Tab Group Name (e.g. Confluence)"
+            required
+          />
+        </div>
+        <div class="form-row">
+          <input
+            type="text"
+            id="quick-rule-pattern"
+            class="input-text"
+            placeholder="URL Pattern (e.g. atlassian.net/wiki*)"
+            required
+          />
+        </div>
+        <div class="form-row color-picker-row">
+          <label>Color:</label>
+          <div id="quick-color-picker" class="color-options"></div>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-block">
+          + Save Rule & Group Current Tab
+        </button>
+      </form>
+    </section>
+
+    <section class="rules-section">
+      <div class="section-header">
+        <span class="section-title">Active Rules</span>
+        <span id="rules-count" class="badge">0</span>
+      </div>
+      <div id="rules-list" class="rules-list"></div>
+    </section>
+  </div>
+
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>
