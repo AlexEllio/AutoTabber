@@ -2,6 +2,10 @@
   "name": "autotabber",
   "version": "1.0.0",
   "description": "Chrome extension to automatically organize tabs into native Tab Groups based on URL patterns and domains.",
+  "author": {
+    "name": "Alexander Elliott",
+    "url": "https://github.com/AlexEllio"
+  },
   "private": true,
   "license": "MIT",
   "type": "module",
