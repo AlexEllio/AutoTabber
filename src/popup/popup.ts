@@ -217,7 +217,12 @@ function setupEventListeners(): void {
     });
 
     // Reorganize open tabs immediately
-    await chrome.runtime.sendMessage({ action: 'RULES_UPDATED', reorganize: true });
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.runtime.sendMessage({
+      action: 'RULES_UPDATED',
+      reorganize: true,
+      explicitTabId: activeTab?.id
+    });
 
     await renderRulesList();
 

@@ -10,8 +10,8 @@ AutoTabber is a Chrome extension (Manifest V3) that automatically organizes tabs
 - **Deep URL Matching**: Matches not just root domains, but subdomains and path prefixes (e.g. `atlassian.net/wiki*` for Confluence vs. `atlassian.net/jira*` for Jira).
 - **Specificity-First Conflict Resolution**: If a URL matches multiple rules, the most specific pattern always wins (e.g. a deep path pattern takes precedence over a broad domain pattern).
 - **Per-Window Isolation**: Groups are managed strictly within the active browser window.
-- **Dynamic Re-Grouping**: Moves tabs into their matching group if you navigate between services, while preserving ungrouped status if navigating to an unconfigured site.
-- **Respects Manual Overrides**: If you manually pull a tab out of a group, AutoTabber will leave it ungrouped until you navigate to a new URL.
+- **Dynamic Re-Grouping**: Moves tabs into their matching group if you navigate between services, unless that tab has a grouping opt-out.
+- **Tab Grouping Opt-Out**: Manually pulling a tab out of a group keeps that tab ungrouped across navigation and service worker restarts. Other tabs at the same URL are unaffected. Manually grouping the tab or using Quick Add to group it clears the opt-out; closing the tab or restarting Chrome also resets it.
 - **Quick-Add Popup**: Detects your active tab's domain and path to suggest and create rules in one click.
 - **Full Options & Rules Manager**: Reorder rule priority, customize Chrome tab group colors, and backup/restore rules via JSON.
 - **Optional Inactive Auto-Collapse**: Keep your tab strip clean by automatically collapsing inactive groups when switching away.
@@ -81,7 +81,7 @@ New prebuilt downloads are published automatically when a `v*` version tag is pu
 - **Language**: TypeScript
 - **Bundler**: Vite
 - **Test Runner**: Vitest
-- **Storage**: `chrome.storage.sync` with `chrome.storage.local` fallback
+- **Storage**: Rules and settings use `chrome.storage.sync` with a `chrome.storage.local` fallback; tab grouping opt-outs use `chrome.storage.session`.
 - **Permissions**: `tabs`, `tabGroups`, `storage` (minimal, privacy-preserving)
 
 ---
