@@ -116,9 +116,10 @@ describe('tab grouping opt-out', () => {
     const worker = await loadServiceWorker();
     const optedOutTab = makeTab(1, 'https://github.com/first');
 
-    worker.events.onUpdated.dispatch(1, { groupId: -1 }, optedOutTab);
+    worker.events.onUpdated.dispatch(1, { groupId: -1, status: 'complete' }, optedOutTab);
     await settleAsyncListeners();
 
+    expect(worker.group).not.toHaveBeenCalled();
     worker.group.mockClear();
     worker.events.onUpdated.dispatch(
       1,

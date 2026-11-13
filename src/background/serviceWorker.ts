@@ -212,6 +212,10 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 // Tab update listener (URL changes or navigation finishes)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+    return;
+  }
+
   if (tab.url && (changeInfo.url || changeInfo.status === 'complete')) {
     processTab(tab);
   }
