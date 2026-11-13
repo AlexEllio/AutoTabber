@@ -2,8 +2,58 @@ import { findBestRuleMatch } from '../common/matcher';
 import { getStorageData } from '../common/storage';
 import { TabRule } from '../common/types';
 
-// In-memory cache of manual overrides: tabId -> normalized URL at time of manual ungroup
-const manualOverrides = new Map<number, string>();
+const TAB_GROUPING_OPTOUTS_KEY = 'tabGroupingOptOuts';
+const tabGroupingOptOuts = new Set<number>();
+let tabGroupingOptOutsReady: Promise<void> | undefined;
+let pendingTabGroupingOptOutWrite: Promise<void> = Promise.resolve();
+
+function loadTabGroupingOptOuts(): Promise<void> {
+  if (!tabGroupingOptOutsReady) {
+    tabGroupingOptOutsReady = chrome.storage.session
+      .get(TAB_GROUPING_OPTOUTS_KEY)
+      .then((data) => {
+        const storedTabIds = data[TAB_GROUPING_OPTOUTS_KEY];
+        if (Array.isArray(storedTabIds)) {
+          for (const tabId of storedTabIds) {
+            if (typeof tabId === 'number' && Number.isInteger(tabId)) {
+              tabGroupingOptOuts.add(tabId);
+            }
+          }
+        }
+      });
+  }
+
+  return tabGroupingOptOutsReady;
+}
+
+async function setTabGroupingOptOut(tabId: number, excluded: boolean): Promise<void> {
+  await loadTabGroupingOptOuts();
+
+  if (tabGroupingOptOuts.has(tabId) === excluded) {
+    return;
+  }
+
+  if (excluded) {
+    tabGroupingOptOuts.add(tabId);
+  } else {
+    tabGroupingOptOuts.delete(tabId);
+  }
+
+  const write = pendingTabGroupingOptOutWrite
+    .catch(() => undefined)
+    .then(() =>
+      chrome.storage.session.set({
+        [TAB_GROUPING_OPTOUTS_KEY]: [...tabGroupingOptOuts]
+      })
+    );
+  pendingTabGroupingOptOutWrite = write;
+  await write;
+}
+
+async function hasTabGroupingOptOut(tabId: number): Promise<boolean> {
+  await loadTabGroupingOptOuts();
+  return tabGroupingOptOuts.has(tabId);
+}
 
 // Mutex / in-flight tracker to prevent rapid duplicate groupings on rapid tab updates
 const processingTabs = new Set<number>();
@@ -11,40 +61,38 @@ const processingTabs = new Set<number>();
 /**
  * Organizes a single tab into its matching tab group if a rule matches.
  */
-async function processTab(tab: chrome.tabs.Tab): Promise<void> {
+async function processTab(tab: chrome.tabs.Tab): Promise<boolean> {
   if (!tab.id || tab.pinned || !tab.url || tab.windowId === undefined) {
-    return;
+    return false;
   }
 
   // Prevent recursive or concurrent processing of the same tab
   if (processingTabs.has(tab.id)) {
-    return;
-  }
-
-  // Ignore internal Chrome or extension URLs
-  if (
-    tab.url.startsWith('chrome://') ||
-    tab.url.startsWith('about:') ||
-    tab.url.startsWith('chrome-extension://') ||
-    tab.url.startsWith('devtools://')
-  ) {
-    return;
-  }
-
-  // Check manual override
-  const overriddenUrl = manualOverrides.get(tab.id);
-  if (overriddenUrl && overriddenUrl === tab.url) {
-    return;
+    return false;
   }
 
   processingTabs.add(tab.id);
 
   try {
+    if (await hasTabGroupingOptOut(tab.id)) {
+      return false;
+    }
+
+    // Ignore internal Chrome or extension URLs
+    if (
+      tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('about:') ||
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('devtools://')
+    ) {
+      return false;
+    }
+
     const { rules } = await getStorageData();
     const match = findBestRuleMatch(rules, tab.url);
 
     if (!match) {
-      return;
+      return false;
     }
 
     const targetRule = match.rule;
@@ -55,7 +103,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
         const currentGroup = await chrome.tabGroups.get(tab.groupId);
         if (currentGroup.title === targetRule.name) {
           // Already in the correct group
-          return;
+          return true;
         }
       } catch {
         // Group may no longer exist
@@ -87,8 +135,11 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
         color: targetRule.color
       });
     }
+
+    return true;
   } catch (err) {
     console.debug('AutoTabber: tab grouping skipped or failed:', err);
+    return false;
   } finally {
     processingTabs.delete(tab.id);
   }
@@ -97,7 +148,10 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
 /**
  * Organizes all tabs in a specified window (or all windows if unspecified).
  */
-export async function organizeOpenTabs(windowId?: number): Promise<{ processedCount: number; groupedCount: number }> {
+export async function organizeOpenTabs(
+  windowId?: number,
+  explicitTabId?: number
+): Promise<{ processedCount: number; groupedCount: number }> {
   const queryInfo: chrome.tabs.QueryInfo = windowId ? { windowId } : {};
   const tabs = await chrome.tabs.query(queryInfo);
   const { rules } = await getStorageData();
@@ -111,10 +165,12 @@ export async function organizeOpenTabs(windowId?: number): Promise<{ processedCo
 
     const match = findBestRuleMatch(rules, tab.url);
     if (match) {
-      // Clear any manual override when explicitly organizing tabs
-      manualOverrides.delete(tab.id);
-      await processTab(tab);
-      groupedCount++;
+      if (tab.id === explicitTabId) {
+        await setTabGroupingOptOut(tab.id, false);
+      }
+      if (await processTab(tab)) {
+        groupedCount++;
+      }
     }
   }
 
@@ -156,9 +212,8 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 // Tab update listener (URL changes or navigation finishes)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url) {
-    // If URL changed, clear any previous manual override for this tab
-    manualOverrides.delete(tabId);
+  if (changeInfo.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+    return;
   }
 
   if (tab.url && (changeInfo.url || changeInfo.status === 'complete')) {
@@ -168,7 +223,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 // Tab removal listener
 chrome.tabs.onRemoved.addListener((tabId) => {
-  manualOverrides.delete(tabId);
+  setTabGroupingOptOut(tabId, false).catch((err) => {
+    console.error('AutoTabber: Error clearing tab grouping opt-out:', err);
+  });
   processingTabs.delete(tabId);
 });
 
@@ -181,10 +238,13 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 // Chrome triggers onUpdated with changeInfo.groupId
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
-    // Tab was removed from group; record manual override
-    if (tab.url) {
-      manualOverrides.set(tabId, tab.url);
-    }
+    setTabGroupingOptOut(tabId, true).catch((err) => {
+      console.error('AutoTabber: Error saving tab grouping opt-out:', err);
+    });
+  } else if (changeInfo.groupId !== undefined) {
+    setTabGroupingOptOut(tabId, false).catch((err) => {
+      console.error('AutoTabber: Error clearing tab grouping opt-out:', err);
+    });
   }
 });
 
@@ -199,7 +259,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.action === 'RULES_UPDATED') {
     if (message.reorganize) {
-      organizeOpenTabs()
+      const explicitTabId = typeof message.explicitTabId === 'number' ? message.explicitTabId : undefined;
+      organizeOpenTabs(undefined, explicitTabId)
         .then((res) => sendResponse({ success: true, ...res }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
