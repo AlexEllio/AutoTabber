@@ -10,11 +10,21 @@ import {
   saveSettings,
   updateRule
 } from '../common/storage';
+import { PatternEditor, setupPatternEditor } from '../common/patternEditor';
+import { saveRuleForm } from '../common/ruleForm';
 import { ChromeGroupColor, TabRule } from '../common/types';
 
 let modalSelectedColor: ChromeGroupColor = 'blue';
+let modalPatternEditor: PatternEditor;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const patternsList = document.getElementById('rule-patterns-list');
+  const addPatternButton = document.getElementById('btn-add-pattern') as HTMLButtonElement | null;
+  if (patternsList && addPatternButton) {
+    modalPatternEditor = setupPatternEditor(patternsList, addPatternButton);
+    modalPatternEditor.setPatterns([]);
+  }
+
   initModalColorPicker();
   await loadAndRenderRules();
   await loadAndRenderSettings();
@@ -216,12 +226,11 @@ function openAddModal(): void {
   const title = document.getElementById('modal-title');
   const idInput = document.getElementById('edit-rule-id') as HTMLInputElement;
   const nameInput = document.getElementById('rule-name-input') as HTMLInputElement;
-  const patternsInput = document.getElementById('rule-patterns-input') as HTMLTextAreaElement;
 
   if (title) title.textContent = 'Add Tab Group Rule';
   if (idInput) idInput.value = '';
   if (nameInput) nameInput.value = '';
-  if (patternsInput) patternsInput.value = '';
+  modalPatternEditor.setPatterns([]);
   setModalColor('blue');
 
   modal?.classList.remove('hidden');
@@ -232,12 +241,11 @@ function openEditModal(rule: TabRule): void {
   const title = document.getElementById('modal-title');
   const idInput = document.getElementById('edit-rule-id') as HTMLInputElement;
   const nameInput = document.getElementById('rule-name-input') as HTMLInputElement;
-  const patternsInput = document.getElementById('rule-patterns-input') as HTMLTextAreaElement;
 
   if (title) title.textContent = 'Edit Tab Group Rule';
   if (idInput) idInput.value = rule.id;
   if (nameInput) nameInput.value = rule.name;
-  if (patternsInput) patternsInput.value = rule.patterns.join('\n');
+  modalPatternEditor.setPatterns(rule.patterns);
   setModalColor(rule.color);
 
   modal?.classList.remove('hidden');
@@ -258,37 +266,25 @@ function setupEventListeners(): void {
     e.preventDefault();
     const idInput = document.getElementById('edit-rule-id') as HTMLInputElement;
     const nameInput = document.getElementById('rule-name-input') as HTMLInputElement;
-    const patternsInput = document.getElementById('rule-patterns-input') as HTMLTextAreaElement;
 
-    const name = nameInput.value.trim();
-    const rawPatterns = patternsInput.value;
-    const patterns = rawPatterns
-      .split(/[\n,]+/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-
-    if (!name || patterns.length === 0) {
+    const isEditing = Boolean(idInput.value);
+    const formData = await saveRuleForm(
+      nameInput.value,
+      modalSelectedColor,
+      modalPatternEditor.getPatternValues(),
+      (data) => isEditing
+        ? updateRule(idInput.value, data)
+        : addRule({ ...data, enabled: true })
+    );
+    if (!formData) {
       alert('Please provide a group name and at least one URL pattern.');
       return;
     }
 
-    if (idInput.value) {
-      // Edit
-      await updateRule(idInput.value, {
-        name,
-        color: modalSelectedColor,
-        patterns
-      });
-      showToast(`Rule "${name}" updated.`);
+    if (isEditing) {
+      showToast(`Rule "${formData.name}" updated.`);
     } else {
-      // Add
-      await addRule({
-        name,
-        color: modalSelectedColor,
-        patterns,
-        enabled: true
-      });
-      showToast(`Rule "${name}" created.`);
+      showToast(`Rule "${formData.name}" created.`);
     }
 
     closeModal();

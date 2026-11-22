@@ -202,6 +202,16 @@ body {
   font-size: 12px;
 }
 
+.input-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-size: 12px;
+}
+
 .input-text:focus {
   outline: none;
   border-color: var(--primary-color);
