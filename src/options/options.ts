@@ -15,6 +15,7 @@ import { saveRuleForm } from '../common/ruleForm';
 import { createRuleWithDuplicateHandling } from '../common/ruleCreation';
 import type { RuleCreationResult } from '../common/ruleCreation';
 import { createRuleCreationPrompts } from '../common/ruleCreationDialog';
+import { requestTabGroupMerge } from '../common/tabGroupMerge';
 import { ChromeGroupColor, TabRule } from '../common/types';
 import type { RuleFormData } from '../common/ruleForm';
 
@@ -287,8 +288,10 @@ function setupEventListeners(): void {
 
           creationResult = await createRuleWithDuplicateHandling(data, {
             loadRules: async () => (await getStorageData()).rules,
+            loadTabGroups: () => chrome.tabGroups.query({}),
             addRule,
             updateRule,
+            mergeTabGroups: requestTabGroupMerge,
             prompts: createRuleCreationPrompts()
           });
         }
@@ -306,9 +309,12 @@ function setupEventListeners(): void {
 
     closeModal();
     await loadAndRenderRules();
-    const merged = !isEditing && creationResult?.type === 'merged';
+    const reorganize = !isEditing && (
+      creationResult?.type === 'merged' ||
+      (creationResult?.type === 'created' && creationResult.nativeGroupsMerged === true)
+    );
     try {
-      await notifyRulesUpdated(merged);
+      await notifyRulesUpdated(reorganize);
     } catch (error) {
       showToast(`Rule saved, but tabs could not be organized: ${error instanceof Error ? error.message : String(error)}`);
       return;
@@ -317,9 +323,13 @@ function setupEventListeners(): void {
     if (isEditing) {
       showToast(`Rule "${formData.name}" updated.`);
     } else if (creationResult?.type === 'merged') {
-      showToast(`Rule "${creationResult.name}" updated.`);
+      showToast(creationResult.nativeGroupsMerged
+        ? `Rule "${creationResult.name}" updated and existing tabs merged.`
+        : `Rule "${creationResult.name}" updated.`);
     } else if (creationResult?.type === 'created') {
-      showToast(`Rule "${creationResult.name}" created.`);
+      showToast(creationResult.nativeGroupsMerged
+        ? `Rule "${creationResult.name}" created and existing tabs merged.`
+        : `Rule "${creationResult.name}" created.`);
     }
   });
 

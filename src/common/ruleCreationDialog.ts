@@ -1,4 +1,5 @@
 import { RuleCreationPrompts } from './ruleCreation';
+import type { RuleCreationTarget } from './ruleCreation';
 import { TabRule } from './types';
 
 interface DialogChoice {
@@ -156,7 +157,7 @@ export function createRuleCreationPrompts(): RuleCreationPrompts {
     chooseName: async (newName: string, existingName: string) => {
       const choice = await showChoiceDialog(
         'Choose the rule name',
-        'Which spelling should the existing rule keep?',
+        'Which spelling should be kept?',
         [
           { label: `Use "${newName}"`, value: 'new', primary: true },
           { label: `Keep "${existingName}"`, value: 'existing' }
@@ -165,12 +166,30 @@ export function createRuleCreationPrompts(): RuleCreationPrompts {
       if (choice === 'new' || choice === 'existing') return choice;
       return 'cancel';
     },
-    confirmMerge: async (target: TabRule, incoming) => {
+    confirmMerge: async (target: RuleCreationTarget, incoming) => {
+      const descriptionParts = target.rule
+        ? [
+            `Add the new URL patterns to the saved rule "${target.rule.name}".`,
+            'Patterns already present will not be duplicated, and existing rule settings will be preserved.'
+          ]
+        : [`Create the saved rule "${incoming.name}" for future matching tabs.`];
+      if (target.tabGroups.length > 0) {
+        descriptionParts.push(
+          `Merge all tabs from ${target.tabGroups.length} matching Chrome tab group(s) into one group per window.`
+        );
+      }
+
       const choice = await showChoiceDialog(
-        `Add patterns to "${target.name}"?`,
-        `Add ${incoming.patterns.join(', ')} to this saved rule? Patterns already present will not be duplicated, and existing settings will be preserved.`,
+        target.tabGroups.length > 0
+          ? `Merge with "${target.name}"?`
+          : `Add patterns to "${target.name}"?`,
+        descriptionParts.join(' '),
         [
-          { label: 'Add to existing rule', value: 'merge', primary: true },
+          {
+            label: target.tabGroups.length > 0 ? 'Merge tabs and rule' : 'Add to existing rule',
+            value: 'merge',
+            primary: true
+          },
           { label: 'Do not merge', value: 'separate' }
         ]
       );

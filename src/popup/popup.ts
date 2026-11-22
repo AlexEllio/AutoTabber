@@ -4,6 +4,7 @@ import { saveRuleForm } from '../common/ruleForm';
 import { createRuleWithDuplicateHandling } from '../common/ruleCreation';
 import type { RuleCreationResult } from '../common/ruleCreation';
 import { createRuleCreationPrompts } from '../common/ruleCreationDialog';
+import { requestTabGroupMerge } from '../common/tabGroupMerge';
 import { ChromeGroupColor, TabRule } from '../common/types';
 import type { RuleFormData } from '../common/ruleForm';
 
@@ -230,8 +231,10 @@ function setupEventListeners(): void {
         async (data) => {
           creationResult = await createRuleWithDuplicateHandling(data, {
             loadRules: async () => (await getStorageData()).rules,
+            loadTabGroups: () => chrome.tabGroups.query({}),
             addRule,
             updateRule,
+            mergeTabGroups: requestTabGroupMerge,
             prompts: createRuleCreationPrompts()
           });
         }
@@ -239,7 +242,7 @@ function setupEventListeners(): void {
     } catch (error) {
       const feedback = document.getElementById('organize-feedback');
       if (feedback) {
-        feedback.textContent = `Could not save rule: ${error instanceof Error ? error.message : String(error)}`;
+        feedback.textContent = `Could not complete rule creation: ${error instanceof Error ? error.message : String(error)}`;
         feedback.className = 'feedback-msg';
       }
       return;
@@ -270,9 +273,13 @@ function setupEventListeners(): void {
     }
 
     if (feedback) {
-      feedback.textContent = creationResult.type === 'merged'
-        ? `Rule "${creationResult.name}" updated; open tabs checked.`
-        : `Rule "${creationResult.name}" added & tabs organized!`;
+      if (creationResult.nativeGroupsMerged) {
+        feedback.textContent = `Rule "${creationResult.name}" saved; existing tabs merged and open tabs checked.`;
+      } else if (creationResult.type === 'merged') {
+        feedback.textContent = `Rule "${creationResult.name}" updated; open tabs checked.`;
+      } else {
+        feedback.textContent = `Rule "${creationResult.name}" added & tabs organized!`;
+      }
       feedback.className = 'feedback-msg success';
     }
   });

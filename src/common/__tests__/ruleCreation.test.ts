@@ -3,6 +3,58 @@ import { createRuleWithDuplicateHandling } from '../ruleCreation';
 import { TabRule } from '../types';
 
 describe('createRuleWithDuplicateHandling', () => {
+  it('prompts to adopt a matching Chrome group even when no saved rule exists', async () => {
+    const existingGroup: chrome.tabGroups.TabGroup = {
+      id: 12,
+      title: 'GitHub',
+      color: 'purple',
+      collapsed: false,
+      windowId: 1
+    };
+    const dependencies = {
+      loadRules: async () => [],
+      loadTabGroups: async () => [existingGroup],
+      addRule: vi.fn(async (rule) => ({
+        ...rule,
+        id: 'new',
+        createdAt: 1,
+        updatedAt: 1
+      })),
+      updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
+      prompts: {
+        selectTarget: vi.fn(),
+        chooseName: vi.fn(async () => 'existing' as const),
+        confirmMerge: vi.fn(async () => true),
+        requestUniqueName: vi.fn()
+      }
+    };
+
+    await expect(
+      createRuleWithDuplicateHandling(
+        { name: 'github', color: 'green', patterns: ['github.com*'] },
+        dependencies
+      )
+    ).resolves.toEqual({
+      type: 'created',
+      name: 'GitHub',
+      nativeGroupsMerged: true
+    });
+
+    expect(dependencies.prompts.chooseName).toHaveBeenCalledWith('github', 'GitHub');
+    expect(dependencies.prompts.confirmMerge).toHaveBeenCalledWith(
+      { name: 'GitHub', rule: null, tabGroups: [existingGroup] },
+      { name: 'GitHub', color: 'green', patterns: ['github.com*'] }
+    );
+    expect(dependencies.addRule).toHaveBeenCalledWith({
+      name: 'GitHub',
+      color: 'green',
+      patterns: ['github.com*'],
+      enabled: true
+    });
+    expect(dependencies.mergeTabGroups).toHaveBeenCalledWith('GitHub', 'green');
+  });
+
   it('creates a new rule without prompting when its name is unique', async () => {
     const newRule: TabRule = {
       id: 'new',
@@ -15,8 +67,10 @@ describe('createRuleWithDuplicateHandling', () => {
     };
     const dependencies = {
       loadRules: async () => [],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => newRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(),
@@ -56,8 +110,10 @@ describe('createRuleWithDuplicateHandling', () => {
     const updateRule = vi.fn(async () => undefined);
     const dependencies = {
       loadRules: async () => rules,
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => existingRule),
       updateRule,
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(async () => 'new' as const),
@@ -98,8 +154,10 @@ describe('createRuleWithDuplicateHandling', () => {
     };
     const dependencies = {
       loadRules: async () => [existingRule],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => existingRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(async () => 'existing' as const),
@@ -139,8 +197,10 @@ describe('createRuleWithDuplicateHandling', () => {
     };
     const dependencies = {
       loadRules: async () => [existingRule],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => newRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(),
@@ -178,8 +238,10 @@ describe('createRuleWithDuplicateHandling', () => {
     };
     const dependencies = {
       loadRules: async () => [existingRule],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => existingRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(),
@@ -219,8 +281,10 @@ describe('createRuleWithDuplicateHandling', () => {
     };
     const dependencies = {
       loadRules: async () => [firstRule, secondRule],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => firstRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(async (matches: TabRule[]) => matches[1].id),
         chooseName: vi.fn(),
@@ -265,8 +329,10 @@ describe('createRuleWithDuplicateHandling', () => {
       .mockResolvedValueOnce(true);
     const dependencies = {
       loadRules: async () => [firstRule, secondRule],
+      loadTabGroups: async () => [],
       addRule: vi.fn(async () => firstRule),
       updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
       prompts: {
         selectTarget: vi.fn(),
         chooseName: vi.fn(),
@@ -289,5 +355,57 @@ describe('createRuleWithDuplicateHandling', () => {
       patterns: ['jira.example.com*', 'wiki.example.com*']
     });
     expect(dependencies.addRule).not.toHaveBeenCalled();
+  });
+
+  it('rechecks a replacement name against native Chrome groups too', async () => {
+    const docsGroup: chrome.tabGroups.TabGroup = {
+      id: 21,
+      title: 'Docs',
+      color: 'green',
+      collapsed: false,
+      windowId: 1
+    };
+    const jiraGroup: chrome.tabGroups.TabGroup = {
+      ...docsGroup,
+      id: 22,
+      title: 'Jira',
+      color: 'blue'
+    };
+    const confirmMerge = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const dependencies = {
+      loadRules: async () => [],
+      loadTabGroups: async () => [docsGroup, jiraGroup],
+      addRule: vi.fn(async (rule) => ({
+        ...rule,
+        id: 'new',
+        createdAt: 1,
+        updatedAt: 1
+      })),
+      updateRule: vi.fn(async () => undefined),
+      mergeTabGroups: vi.fn(async () => undefined),
+      prompts: {
+        selectTarget: vi.fn(),
+        chooseName: vi.fn(),
+        confirmMerge,
+        requestUniqueName: vi.fn(async () => 'Jira')
+      }
+    };
+
+    await expect(
+      createRuleWithDuplicateHandling(
+        { name: 'Docs', color: 'orange', patterns: ['wiki.example.com*'] },
+        dependencies
+      )
+    ).resolves.toEqual({
+      type: 'created',
+      name: 'Jira',
+      nativeGroupsMerged: true
+    });
+
+    expect(dependencies.prompts.requestUniqueName).toHaveBeenCalledWith('Docs');
+    expect(confirmMerge).toHaveBeenCalledTimes(2);
+    expect(dependencies.mergeTabGroups).toHaveBeenCalledWith('Jira', 'orange');
   });
 });

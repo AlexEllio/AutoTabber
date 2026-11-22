@@ -27,12 +27,12 @@ function createStorageArea(data: Record<string, unknown>) {
   };
 }
 
-function makeTab(id: number, url: string, groupId = -1): chrome.tabs.Tab {
+function makeTab(id: number, url: string, groupId = -1, windowId = 1): chrome.tabs.Tab {
   return {
     id,
     url,
     groupId,
-    windowId: 1,
+    windowId,
     pinned: false
   } as chrome.tabs.Tab;
 }
@@ -41,7 +41,10 @@ async function settleAsyncListeners(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function loadServiceWorker(sessionData: Record<string, unknown> = {}) {
+async function loadServiceWorker(
+  sessionData: Record<string, unknown> = {},
+  initialGroups: chrome.tabGroups.TabGroup[] = []
+) {
   const onCreated = createEvent();
   const onUpdated = createEvent();
   const onRemoved = createEvent();
@@ -65,8 +68,41 @@ async function loadServiceWorker(sessionData: Record<string, unknown> = {}) {
   };
   const sync = createStorageArea(syncData);
   const session = createStorageArea(sessionData);
-  const group = vi.fn(async () => 10);
   const openTabs: chrome.tabs.Tab[] = [];
+  const groups = initialGroups.map((group) => ({ ...group }));
+  let nextGroupId = 100;
+  const group = vi.fn(async (options: {
+    tabIds: number | number[];
+    groupId?: number;
+    createProperties?: { windowId?: number };
+  }) => {
+    const tabIds = Array.isArray(options.tabIds) ? options.tabIds : [options.tabIds];
+    let groupId = options.groupId;
+    if (groupId === undefined) {
+      groupId = nextGroupId++;
+      const firstTab = openTabs.find((tab) => tab.id !== undefined && tabIds.includes(tab.id));
+      groups.push({
+        id: groupId,
+        title: undefined,
+        color: 'grey',
+        collapsed: false,
+        windowId: options.createProperties?.windowId ?? firstTab?.windowId ?? 1
+      });
+    }
+
+    for (const tab of openTabs) {
+      if (tab.id !== undefined && tabIds.includes(tab.id)) {
+        tab.groupId = groupId;
+      }
+    }
+
+    for (let index = groups.length - 1; index >= 0; index--) {
+      if (!openTabs.some((tab) => tab.groupId === groups[index].id)) {
+        groups.splice(index, 1);
+      }
+    }
+    return groupId;
+  });
 
   vi.stubGlobal('chrome', {
     tabs: {
@@ -74,17 +110,27 @@ async function loadServiceWorker(sessionData: Record<string, unknown> = {}) {
       onUpdated,
       onRemoved,
       onActivated,
-      query: vi.fn(async () => openTabs),
+      query: vi.fn(async (queryInfo: chrome.tabs.QueryInfo = {}) => openTabs.filter((tab) =>
+        (queryInfo.groupId === undefined || tab.groupId === queryInfo.groupId) &&
+        (queryInfo.windowId === undefined || tab.windowId === queryInfo.windowId)
+      )),
       get: vi.fn(async () => makeTab(1, 'https://github.com/')),
       group
     },
     tabGroups: {
       TAB_GROUP_ID_NONE: -1,
-      get: vi.fn(async () => {
-        throw new Error('No current group');
+      get: vi.fn(async (groupId: number) => {
+        const foundGroup = groups.find((candidate) => candidate.id === groupId);
+        if (!foundGroup) throw new Error('No current group');
+        return foundGroup;
       }),
-      query: vi.fn(async () => []),
-      update: vi.fn(async () => undefined)
+      query: vi.fn(async (queryInfo: chrome.tabGroups.QueryInfo = {}) => groups.filter((candidate) =>
+        queryInfo.windowId === undefined || candidate.windowId === queryInfo.windowId
+      )),
+      update: vi.fn(async (groupId: number, updates: Partial<chrome.tabGroups.TabGroup>) => {
+        const foundGroup = groups.find((candidate) => candidate.id === groupId);
+        if (foundGroup) Object.assign(foundGroup, updates);
+      })
     },
     storage: { sync, local: sync, session },
     runtime: {
@@ -101,6 +147,7 @@ async function loadServiceWorker(sessionData: Record<string, unknown> = {}) {
   return {
     events: { onCreated, onUpdated, onRemoved, onMessage },
     group,
+    groups,
     openTabs,
     session
   };
@@ -141,6 +188,51 @@ describe('tab grouping opt-out', () => {
     expect(worker.group).toHaveBeenCalledWith({
       tabIds: [2],
       createProperties: { windowId: 1 }
+    });
+  });
+
+  describe('same-name Chrome tab-group merging', () => {
+    it('consolidates all tabs into one matching group per window, then organizes new matching tabs', async () => {
+      const worker = await loadServiceWorker({}, [
+        { id: 10, title: 'GitHub', color: 'blue', collapsed: false, windowId: 1 },
+        { id: 11, title: 'github', color: 'red', collapsed: false, windowId: 1 },
+        { id: 20, title: 'GITHUB', color: 'green', collapsed: false, windowId: 2 }
+      ]);
+      worker.openTabs.push(
+        makeTab(1, 'https://legacy.example/first', 10),
+        makeTab(2, 'https://legacy.example/second', 11),
+        makeTab(3, 'https://legacy.example/other-window', 20, 2),
+        makeTab(4, 'https://github.com/new')
+      );
+
+      const mergeResponse = await new Promise<unknown>((resolve) => {
+        worker.events.onMessage.dispatch(
+          { action: 'MERGE_CHROME_TAB_GROUPS', name: 'GitHub', color: 'purple' },
+          {},
+          resolve
+        );
+      });
+
+      expect(mergeResponse).toMatchObject({ success: true });
+      expect(worker.groups.filter((group) => group.windowId === 1)).toEqual([
+        { id: 10, title: 'GitHub', color: 'purple', collapsed: false, windowId: 1 }
+      ]);
+      expect(worker.groups.filter((group) => group.windowId === 2)).toEqual([
+        { id: 20, title: 'GitHub', color: 'purple', collapsed: false, windowId: 2 }
+      ]);
+      expect(worker.openTabs.slice(0, 3).map((tab) => tab.groupId)).toEqual([10, 10, 20]);
+
+      const organizeResponse = await new Promise<unknown>((resolve) => {
+        worker.events.onMessage.dispatch(
+          { action: 'RULES_UPDATED', reorganize: true },
+          {},
+          resolve
+        );
+      });
+
+      expect(organizeResponse).toMatchObject({ success: true, groupedCount: 1 });
+      expect(worker.openTabs[3].groupId).toBe(10);
+      expect(worker.groups.filter((group) => group.title === 'GitHub')).toHaveLength(2);
     });
   });
 
