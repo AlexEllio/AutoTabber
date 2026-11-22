@@ -12,7 +12,11 @@ import {
 } from '../common/storage';
 import { PatternEditor, setupPatternEditor } from '../common/patternEditor';
 import { saveRuleForm } from '../common/ruleForm';
+import { createRuleWithDuplicateHandling } from '../common/ruleCreation';
+import type { RuleCreationResult } from '../common/ruleCreation';
+import { createRuleCreationPrompts } from '../common/ruleCreationDialog';
 import { ChromeGroupColor, TabRule } from '../common/types';
+import type { RuleFormData } from '../common/ruleForm';
 
 let modalSelectedColor: ChromeGroupColor = 'blue';
 let modalPatternEditor: PatternEditor;
@@ -268,28 +272,55 @@ function setupEventListeners(): void {
     const nameInput = document.getElementById('rule-name-input') as HTMLInputElement;
 
     const isEditing = Boolean(idInput.value);
-    const formData = await saveRuleForm(
-      nameInput.value,
-      modalSelectedColor,
-      modalPatternEditor.getPatternValues(),
-      (data) => isEditing
-        ? updateRule(idInput.value, data)
-        : addRule({ ...data, enabled: true })
-    );
+    let creationResult: RuleCreationResult | undefined;
+    let formData: RuleFormData | null;
+    try {
+      formData = await saveRuleForm(
+        nameInput.value,
+        modalSelectedColor,
+        modalPatternEditor.getPatternValues(),
+        async (data) => {
+          if (isEditing) {
+            await updateRule(idInput.value, data);
+            return;
+          }
+
+          creationResult = await createRuleWithDuplicateHandling(data, {
+            loadRules: async () => (await getStorageData()).rules,
+            addRule,
+            updateRule,
+            prompts: createRuleCreationPrompts()
+          });
+        }
+      );
+    } catch (error) {
+      alert(`Could not save rule: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+
     if (!formData) {
       alert('Please provide a group name and at least one URL pattern.');
+      return;
+    }
+    if (!isEditing && (!creationResult || creationResult.type === 'cancelled')) return;
+
+    closeModal();
+    await loadAndRenderRules();
+    const merged = !isEditing && creationResult?.type === 'merged';
+    try {
+      await notifyRulesUpdated(merged);
+    } catch (error) {
+      showToast(`Rule saved, but tabs could not be organized: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
 
     if (isEditing) {
       showToast(`Rule "${formData.name}" updated.`);
-    } else {
-      showToast(`Rule "${formData.name}" created.`);
+    } else if (creationResult?.type === 'merged') {
+      showToast(`Rule "${creationResult.name}" updated.`);
+    } else if (creationResult?.type === 'created') {
+      showToast(`Rule "${creationResult.name}" created.`);
     }
-
-    closeModal();
-    await loadAndRenderRules();
-    await notifyRulesUpdated();
   });
 
   // Export JSON
@@ -343,11 +374,18 @@ function setupEventListeners(): void {
   });
 }
 
-async function notifyRulesUpdated(): Promise<void> {
+async function notifyRulesUpdated(reorganize = false): Promise<void> {
   try {
-    await chrome.runtime.sendMessage({ action: 'RULES_UPDATED', reorganize: true });
-  } catch {
-    // Service worker may be asleep, will load storage when woken
+    const response = await chrome.runtime.sendMessage({
+      action: 'RULES_UPDATED',
+      ...(reorganize ? { reorganize: true } : {})
+    });
+    if (reorganize && (!response || response.success !== true)) {
+      throw new Error(response?.error || 'Tab organization did not complete.');
+    }
+  } catch (error) {
+    if (reorganize) throw error;
+    console.debug('AutoTabber: Rules saved, but service worker notification failed:', error);
   }
 }
 

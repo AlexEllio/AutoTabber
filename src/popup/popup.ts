@@ -1,7 +1,11 @@
 import { addRule, CHROME_GROUP_COLORS, deleteRule, getStorageData, updateRule } from '../common/storage';
 import { PatternEditor, setupPatternEditor } from '../common/patternEditor';
 import { saveRuleForm } from '../common/ruleForm';
+import { createRuleWithDuplicateHandling } from '../common/ruleCreation';
+import type { RuleCreationResult } from '../common/ruleCreation';
+import { createRuleCreationPrompts } from '../common/ruleCreationDialog';
 import { ChromeGroupColor, TabRule } from '../common/types';
+import type { RuleFormData } from '../common/ruleForm';
 
 let selectedColor: ChromeGroupColor = 'blue';
 let quickAddPatternEditor: PatternEditor;
@@ -216,27 +220,59 @@ function setupEventListeners(): void {
     const nameInput = document.getElementById('quick-rule-name') as HTMLInputElement | null;
 
     if (!nameInput) return;
-    const formData = await saveRuleForm(
-      nameInput.value,
-      selectedColor,
-      quickAddPatternEditor.getPatternValues(),
-      (data) => addRule({ ...data, enabled: true })
-    );
-    if (!formData) return;
+    let creationResult: RuleCreationResult | undefined;
+    let formData: RuleFormData | null;
+    try {
+      formData = await saveRuleForm(
+        nameInput.value,
+        selectedColor,
+        quickAddPatternEditor.getPatternValues(),
+        async (data) => {
+          creationResult = await createRuleWithDuplicateHandling(data, {
+            loadRules: async () => (await getStorageData()).rules,
+            addRule,
+            updateRule,
+            prompts: createRuleCreationPrompts()
+          });
+        }
+      );
+    } catch (error) {
+      const feedback = document.getElementById('organize-feedback');
+      if (feedback) {
+        feedback.textContent = `Could not save rule: ${error instanceof Error ? error.message : String(error)}`;
+        feedback.className = 'feedback-msg';
+      }
+      return;
+    }
 
-    // Reorganize open tabs immediately
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    await chrome.runtime.sendMessage({
-      action: 'RULES_UPDATED',
-      reorganize: true,
-      explicitTabId: activeTab?.id
-    });
+    if (!formData) return;
+    if (!creationResult || creationResult.type === 'cancelled') return;
 
     await renderRulesList();
 
     const feedback = document.getElementById('organize-feedback');
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const response = await chrome.runtime.sendMessage({
+        action: 'RULES_UPDATED',
+        reorganize: true,
+        explicitTabId: activeTab?.id
+      });
+      if (!response || response.success !== true) {
+        throw new Error(response?.error || 'Tab organization did not complete.');
+      }
+    } catch (error) {
+      if (feedback) {
+        feedback.textContent = `Rule saved, but tabs could not be organized: ${error instanceof Error ? error.message : String(error)}`;
+        feedback.className = 'feedback-msg';
+      }
+      return;
+    }
+
     if (feedback) {
-      feedback.textContent = `Rule "${nameInput.value.trim()}" added & tabs organized!`;
+      feedback.textContent = creationResult.type === 'merged'
+        ? `Rule "${creationResult.name}" updated; open tabs checked.`
+        : `Rule "${creationResult.name}" added & tabs organized!`;
       feedback.className = 'feedback-msg success';
     }
   });
