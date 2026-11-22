@@ -1,9 +1,19 @@
 import { addRule, CHROME_GROUP_COLORS, deleteRule, getStorageData, updateRule } from '../common/storage';
+import { PatternEditor, setupPatternEditor } from '../common/patternEditor';
+import { saveRuleForm } from '../common/ruleForm';
 import { ChromeGroupColor, TabRule } from '../common/types';
 
 let selectedColor: ChromeGroupColor = 'blue';
+let quickAddPatternEditor: PatternEditor;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const patternsList = document.getElementById('quick-rule-patterns-list');
+  const addPatternButton = document.getElementById('btn-quick-add-pattern') as HTMLButtonElement | null;
+  if (patternsList && addPatternButton) {
+    quickAddPatternEditor = setupPatternEditor(patternsList, addPatternButton);
+    quickAddPatternEditor.setPatterns([]);
+  }
+
   initColorPicker();
   await inspectCurrentTab();
   await renderRulesList();
@@ -31,7 +41,6 @@ function initColorPicker(): void {
 
 async function inspectCurrentTab(): Promise<void> {
   const nameInput = document.getElementById('quick-rule-name') as HTMLInputElement | null;
-  const patternInput = document.getElementById('quick-rule-pattern') as HTMLInputElement | null;
 
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -70,7 +79,7 @@ async function inspectCurrentTab(): Promise<void> {
     }
 
     if (nameInput) nameInput.value = suggestedName;
-    if (patternInput) patternInput.value = suggestedPattern;
+    quickAddPatternEditor.setPatterns([suggestedPattern]);
 
     // Re-highlight color if changed
     document.querySelectorAll('.color-dot').forEach((d) => {
@@ -205,16 +214,15 @@ function setupEventListeners(): void {
   document.getElementById('form-quick-add')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const nameInput = document.getElementById('quick-rule-name') as HTMLInputElement | null;
-    const patternInput = document.getElementById('quick-rule-pattern') as HTMLInputElement | null;
 
-    if (!nameInput?.value.trim() || !patternInput?.value.trim()) return;
-
-    await addRule({
-      name: nameInput.value.trim(),
-      color: selectedColor,
-      patterns: [patternInput.value.trim()],
-      enabled: true
-    });
+    if (!nameInput) return;
+    const formData = await saveRuleForm(
+      nameInput.value,
+      selectedColor,
+      quickAddPatternEditor.getPatternValues(),
+      (data) => addRule({ ...data, enabled: true })
+    );
+    if (!formData) return;
 
     // Reorganize open tabs immediately
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });

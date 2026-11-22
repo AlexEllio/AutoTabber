@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AutoTabber - Rules & Settings Manager</title>
   <link rel="stylesheet" href="./options.css" />
+  <link rel="stylesheet" href="../common/patternEditor.css" />
 </head>
 <body>
   <div class="options-container">
@@ -109,15 +110,10 @@
           </div>
 
           <div class="form-group">
-            <label for="rule-patterns-input">URL Patterns (one per line or comma-separated):</label>
-            <textarea
-              id="rule-patterns-input"
-              class="input-textarea"
-              rows="4"
-              placeholder="e.g.&#10;atlassian.net/wiki*&#10;*.atlassian.net/wiki"
-              required
-            ></textarea>
-            <span class="help-text">Supports wildcard subdomains (<code>*.domain.com</code>) and path prefixes (<code>domain.com/path*</code>).</span>
+            <label>URL Patterns:</label>
+            <div id="rule-patterns-list" class="pattern-input-list"></div>
+            <button type="button" id="btn-add-pattern" class="icon-btn pattern-add-btn" title="Add pattern" aria-label="Add pattern">+</button>
+            <span class="help-text">Add one or more URL patterns. You can paste comma- or newline-separated patterns into a row. Supports wildcard subdomains (<code>*.domain.com</code>) and path prefixes (<code>domain.com/path*</code>).</span>
           </div>
 
           <div class="modal-footer">

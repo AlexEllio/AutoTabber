@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AutoTabber</title>
   <link rel="stylesheet" href="./popup.css" />
+  <link rel="stylesheet" href="../common/patternEditor.css" />
 </head>
 <body>
   <div class="popup-container">
@@ -36,13 +37,8 @@
           />
         </div>
         <div class="form-row">
-          <input
-            type="text"
-            id="quick-rule-pattern"
-            class="input-text"
-            placeholder="URL Pattern (e.g. atlassian.net/wiki*)"
-            required
-          />
+          <div id="quick-rule-patterns-list" class="pattern-input-list"></div>
+          <button type="button" id="btn-quick-add-pattern" class="icon-btn pattern-add-btn" title="Add pattern" aria-label="Add pattern">+</button>
         </div>
         <div class="form-row color-picker-row">
           <label>Color:</label>

@@ -1,0 +1,32 @@
+.pattern-input-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pattern-input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.pattern-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  resize: vertical;
+}
+
+.pattern-remove-btn {
+  flex-shrink: 0;
+}
+
+.pattern-add-btn {
+  margin-top: 6px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.pattern-remove-btn[hidden] {
+  display: none;
+}
