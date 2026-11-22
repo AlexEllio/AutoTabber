@@ -1,6 +1,7 @@
 import { findBestRuleMatch } from '../common/matcher';
-import { getStorageData } from '../common/storage';
-import { TabRule } from '../common/types';
+import { CHROME_GROUP_COLORS, getStorageData } from '../common/storage';
+import { normalizeTabGroupName } from '../common/tabGroupName';
+import { ChromeGroupColor, TabRule } from '../common/types';
 
 const TAB_GROUPING_OPTOUTS_KEY = 'tabGroupingOptOuts';
 const tabGroupingOptOuts = new Set<number>();
@@ -57,6 +58,34 @@ async function hasTabGroupingOptOut(tabId: number): Promise<boolean> {
 
 // Mutex / in-flight tracker to prevent rapid duplicate groupings on rapid tab updates
 const processingTabs = new Set<number>();
+
+async function mergeSameNameChromeGroups(name: string, color: ChromeGroupColor): Promise<void> {
+  const normalizedName = normalizeTabGroupName(name);
+  const groups = await chrome.tabGroups.query({});
+  const matchingGroups = groups.filter(
+    (group) => normalizeTabGroupName(group.title) === normalizedName
+  );
+  const groupsByWindow = new Map<number, chrome.tabGroups.TabGroup[]>();
+
+  for (const group of matchingGroups) {
+    const windowGroups = groupsByWindow.get(group.windowId) ?? [];
+    windowGroups.push(group);
+    groupsByWindow.set(group.windowId, windowGroups);
+  }
+
+  for (const windowGroups of groupsByWindow.values()) {
+    const [survivingGroup, ...duplicateGroups] = windowGroups;
+    for (const duplicateGroup of duplicateGroups) {
+      const tabs = await chrome.tabs.query({ groupId: duplicateGroup.id });
+      const tabIds = tabs.flatMap((tab) => tab.id === undefined ? [] : [tab.id]);
+      if (tabIds.length > 0) {
+        await chrome.tabs.group({ tabIds, groupId: survivingGroup.id });
+      }
+    }
+
+    await chrome.tabGroups.update(survivingGroup.id, { title: name, color });
+  }
+}
 
 /**
  * Organizes a single tab into its matching tab group if a rule matches.
@@ -250,6 +279,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 // Messages from Popup or Options UI
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.action === 'MERGE_CHROME_TAB_GROUPS') {
+    const name = typeof message.name === 'string' ? message.name.trim() : '';
+    const color = message.color;
+    if (!name || !CHROME_GROUP_COLORS.includes(color)) {
+      sendResponse({ success: false, error: 'Invalid Chrome tab-group merge request.' });
+      return false;
+    }
+
+    mergeSameNameChromeGroups(name, color)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({
+        success: false,
+        error: err instanceof Error ? err.message : String(err)
+      }));
+    return true;
+  }
+
   if (message.action === 'ORGANIZE_TABS') {
     organizeOpenTabs(message.windowId)
       .then((res) => sendResponse({ success: true, ...res }))

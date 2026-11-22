@@ -1,0 +1,49 @@
+.rule-creation-dialog {
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--panel-bg, var(--card-bg, #fff));
+  color: var(--text-color);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.rule-creation-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.rule-creation-dialog h2 {
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.rule-creation-dialog p {
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rule-creation-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.rule-creation-dialog-actions .btn {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.rule-creation-dialog label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.rule-creation-dialog .input-text {
+  margin-bottom: 4px;
+}
